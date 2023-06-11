@@ -4,6 +4,7 @@
 #include <limine.h>
 #include <flanterm/backends/fb.h>
 #include <./sys/gdt.h>
+#include <./sys/idt.h>
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -166,7 +167,7 @@ void _start(void) {
     flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
 
     gdt_i();
-    //idt_init();
+    init_idt();
 
     for (uint64_t i = 0; i < framebuffer->height; i++)
     {
