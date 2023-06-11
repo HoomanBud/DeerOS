@@ -179,7 +179,7 @@ void _start(void) {
         }
     }
 
-    //asm("int $0x0");
+    asm("int $0x0");
 
     // We're done, just hang...
     hcf();
