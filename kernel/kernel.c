@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <limine.h>
 #include <flanterm/backends/fb.h>
-#include <gdt.h>
+#include <./sys/gdt.h>
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
