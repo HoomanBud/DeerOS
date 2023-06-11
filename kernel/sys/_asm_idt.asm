@@ -1,95 +1,102 @@
-global _load_idt
+%macro pushAll 0
+      push   rax
+      push   rcx
+      push   rdx
+      push   rbx
+      push   rbp
+      push   rsi
+      push   rdi
+%endmacro
+
+%macro popAll 0
+      pop      rdi
+      pop      rsi
+      pop      rbp
+      pop      rbx
+      pop      rdx
+      pop      rcx
+      pop      rax
+%endmacro
+
+[GLOBAL _load_idt]
+[EXTERN idtP]
 _load_idt:
-    mov eax, [esp+4]
-    lidt [eax]
-    ret
+   lidt    [idtP]
+   ret
 
-%macro isr_noerr 1
-global isr%1
-isr%1:
-    cli
-    push 0
-    push %1
-    jmp isr_stub
-%endmacro
 
-%macro isr_err 1
-global isr%1
-isr%1:
-    cli
-    push %1
-    jmp	isr_stub
-%endmacro
+[EXTERN isrHandler]
+isrCommon:
+    pushAll
 
-isr_noerr 0
-isr_noerr 1
-isr_noerr 2
-isr_noerr 3
-isr_noerr 4
-isr_noerr 5
-isr_noerr 6
-isr_noerr 7
-isr_err 8
-isr_noerr 9
-isr_err 10
-isr_err 11
-isr_err 12
-isr_err 13
-isr_err 14
-isr_noerr 15
-isr_noerr 16
-isr_noerr 17
-isr_noerr 18
-isr_noerr 19
-isr_noerr 20
-isr_noerr 21
-isr_noerr 22
-isr_noerr 23
-isr_noerr 24
-isr_noerr 25
-isr_noerr 26
-isr_noerr 27
-isr_noerr 28
-isr_noerr 29
-isr_noerr 30
-isr_noerr 31
+    mov      ax, ds
+    push   rax
 
-extern isr_handler
-isr_stub:
-    push rax
-    push rbx
-    push rcx
-    push rdi
-    push rsi
-    push rsp
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
+    mov      ax, 0x10
+    mov      ds, ax
+    mov      es, ax
+    mov      fs, ax
+    mov      gs, ax
 
-    mov rsp, rdi
+    call   isrHandler
 
-    call isr_handler
+    pop      rbx
+    mov      ds, bx
+    mov      es, bx
+    mov      fs, bx
+    mov      gs, bx
 
-    mov rax, rsp
-
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r9
-    pop r8
-    pop rsp
-    pop rsi
-    pop rdi
-    pop rcx
-    pop rbx
-    pop rax
-
+    popAll
+    add      rsp, 8
     sti
     iretq
+
+%macro ISR_NOERRCODE 1
+  global isr%1
+  isr%1:
+    cli
+    push byte 0
+    push byte %1
+    jmp isrCommon
+%endmacro
+
+%macro ISR_ERRCODE 1
+  global isr%1
+  isr%1:
+    cli
+    push byte %1
+    jmp isrCommon
+%endmacro
+
+ISR_NOERRCODE 0
+ISR_NOERRCODE 1
+ISR_NOERRCODE 2
+ISR_NOERRCODE 3
+ISR_NOERRCODE 4
+ISR_NOERRCODE 5
+ISR_NOERRCODE 6
+ISR_NOERRCODE 7
+ISR_ERRCODE   8
+ISR_NOERRCODE 9
+ISR_ERRCODE   10
+ISR_ERRCODE   11
+ISR_ERRCODE   12
+ISR_ERRCODE   13
+ISR_ERRCODE   14
+ISR_NOERRCODE 15
+ISR_NOERRCODE 16
+ISR_NOERRCODE 17
+ISR_NOERRCODE 18
+ISR_NOERRCODE 19
+ISR_NOERRCODE 20
+ISR_NOERRCODE 21
+ISR_NOERRCODE 22
+ISR_NOERRCODE 23
+ISR_NOERRCODE 24
+ISR_NOERRCODE 25
+ISR_NOERRCODE 26
+ISR_NOERRCODE 27
+ISR_NOERRCODE 28
+ISR_NOERRCODE 29
+ISR_NOERRCODE 30
+ISR_NOERRCODE 31
