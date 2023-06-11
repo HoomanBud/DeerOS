@@ -5,10 +5,16 @@
 
 typedef struct registers
 {
-    uint32_t ds;                             // Data segment selector
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by pusha.
-    uint32_t int_no, err_code;               // Interrupt number and error code (if applicable)
-    uint32_t eip, cs, eflags, useresp, ss;   // Pushed by the processor automatically.
+    /* Pushed by common stub */
+	uintptr_t r15, r14, r13, r12;
+	uintptr_t r11, r10, r9, r8;
+	uintptr_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
+
+	/* Pushed by wrapper */
+	uintptr_t int_no, err_code;
+
+	/* Pushed by interrupt */
+	uintptr_t rip, cs, rflags, rsp, ss;
 } registers_t;
 
 typedef void (*isr_handler_t)(registers_t);

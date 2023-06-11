@@ -1,5 +1,6 @@
 #include "isr.h"
 #include "idt.h"
+#include <flanterm/backends/fb.h>
 
 isr_handler_t interrupt_handlers[256];
 
@@ -19,4 +20,6 @@ void isr_handler(registers_t regs)
     {
         interrupt_handlers[regs.int_no](regs);
     }
+
+    return regs;
 }

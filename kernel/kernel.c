@@ -167,7 +167,7 @@ void _start(void) {
     flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
 
     gdt_i();
-    init_idt();
+    //init_idt();
 
     for (uint64_t i = 0; i < framebuffer->height; i++)
     {
@@ -178,6 +178,8 @@ void _start(void) {
             *(uint32_t*) (base + i * framebuffer->pitch + e * framebuffer->bpp / 8) = color;
         }
     }
+
+    //asm("int $0x0");
 
     // We're done, just hang...
     hcf();
