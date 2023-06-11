@@ -1,0 +1,10 @@
+/limine
+/ovmf
+*.iso
+*.hdd
+*.o
+*.elf
+/kernel/*.o
+/kernel/*.elf
+/kernel/*.hdd
+/.vscode
