@@ -138,5 +138,5 @@ void idtSet(uint8_t number, uint64_t base, uint16_t selector, uint8_t flags) {
 }
 
 void isrHandler(registers regs) {
-
+    return regs;
 }
