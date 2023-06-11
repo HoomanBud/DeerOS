@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <./gdt.h>
+#include "gdt.h"
 
 typedef struct{
     uint16_t limit;
