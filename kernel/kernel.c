@@ -166,7 +166,7 @@ void _start(void) {
     flanterm_write(fc, "Loading DeerOS...\n", strlen("Loading DeerOS...\n"));
     flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
 
-    gdt_i();
+    setup_gdt();
     idtStart();
 
     for (uint64_t i = 0; i < framebuffer->height; i++)
