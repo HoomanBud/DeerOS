@@ -133,7 +133,7 @@ void init_idt()
    //  idt_set_gate(46, (uint32_t)irq14, 0x08, 0x8E);
    //  idt_set_gate(47, (uint32_t)irq15, 0x08, 0x8E);
 
-   _load_idt(&idtr);
+   //_load_idt(&idtr);
 }
 
 static void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags)

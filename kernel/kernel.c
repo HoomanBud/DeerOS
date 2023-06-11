@@ -167,7 +167,7 @@ void _start(void) {
     flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
 
     gdt_i();
-    //init_idt();
+    init_idt();
 
     for (uint64_t i = 0; i < framebuffer->height; i++)
     {
