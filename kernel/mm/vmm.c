@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include "vmm.h"
 #include "pmm.h"
+#include "../sys/print.h"
 
 #define PAGE_SIZE 4096
 
@@ -48,7 +49,13 @@ PageTable* allocate_page_table(size_t size) {
 
     void* table_addr = allocate(num_pages * PAGE_SIZE);
     if (table_addr == NULL) {
-        return NULL;
+        print("NULL returned from allocation. Halting...\n");
+    
+        asm ("cli");
+        for (;;)
+        {
+            asm ("hlt");
+        }
     }
 
     PageTable* table = (PageTable*)table_addr;
@@ -68,7 +75,13 @@ void deallocate_page_table(PageTable* table, size_t size) {
 void VMMInit() {
     PageDirectory* directory = allocate_page_table(4096);
     if (directory == NULL) {
-        return;
+        print("Page Directory is NULL. Halting...\n");
+    
+        asm ("cli");
+        for (;;)
+        {
+            asm ("hlt");
+        }
     }
 
     map_page(directory, (uint64_t)directory, (uint64_t)directory, PDE_PRESENT | PDE_WRITABLE);
