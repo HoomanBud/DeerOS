@@ -1,59 +1,141 @@
 #include <stdint.h>
+#include <stddef.h>
 #include "gdt.h"
 
-typedef struct {
-    uint16_t limit_low;
-    uint16_t base_low;
-    uint8_t base_mid;
-    uint8_t access;
-    uint8_t granularity;
-    uint8_t base_high;
-} __attribute__((packed)) gdt_entry_t;
+/* GDT Descritor entry */
+struct gdt_descriptor {
+    uint16_t limit;
+    uint16_t base_low16;
+    uint8_t  base_mid8;
+    uint8_t  access;
+    uint8_t  granularity;
+    uint8_t  base_high8;
+};
 
-// Define the GDT descriptor
-typedef struct {
+/* TSS, for later */
+struct tss_descriptor {
+    uint16_t length;
+    uint16_t base_low16;
+    uint8_t  base_mid8;
+    uint8_t  flags1;
+    uint8_t  flags2;
+    uint8_t  base_high8;
+    uint32_t base_upper32;
+    uint32_t reserved;
+};
+
+/* All the entries */
+struct gdt_descriptor gdt[11];
+
+/* The gdtr itself */
+struct gdtr {
     uint16_t limit;
     uint64_t base;
-} __attribute__((packed)) gdt_descriptor_t;
+} __attribute__((packed));
 
-// Define the GDT
-gdt_entry_t gdt[3];
-gdt_descriptor_t gdt_desc;
+static struct gdtr gdtr;
 
-// Function to load the GDT
-void load_gdt() {
-    gdt_desc.limit = sizeof(gdt) - 1;
-    gdt_desc.base = (uint64_t)&gdt;
+void gdt_init(void) {
+    // Null descriptor.
+    gdt[0].limit       = 0;
+    gdt[0].base_low16  = 0;
+    gdt[0].base_mid8   = 0;
+    gdt[0].access      = 0;
+    gdt[0].granularity = 0;
+    gdt[0].base_high8  = 0;
 
+    // Kernel code 16.
+    gdt[1].limit       = 0xffff;
+    gdt[1].base_low16  = 0;
+    gdt[1].base_mid8   = 0;
+    gdt[1].access      = 0b10011010;
+    gdt[1].granularity = 0b00000000;
+    gdt[1].base_high8  = 0;
+
+    // Kernel data 16.
+    gdt[2].limit       = 0xffff;
+    gdt[2].base_low16  = 0;
+    gdt[2].base_mid8   = 0;
+    gdt[2].access      = 0b10010010;
+    gdt[2].granularity = 0b00000000;
+    gdt[2].base_high8  = 0;
+
+    // Kernel code 32.
+    gdt[3].limit       = 0xffff;
+    gdt[3].base_low16  = 0;
+    gdt[3].base_mid8   = 0;
+    gdt[3].access      = 0b10011010;
+    gdt[3].granularity = 0b11001111;
+    gdt[3].base_high8  = 0;
+
+    // Kernel data 32.
+    gdt[4].limit       = 0xffff;
+    gdt[4].base_low16  = 0;
+    gdt[4].base_mid8   = 0;
+    gdt[4].access      = 0b10010010;
+    gdt[4].granularity = 0b11001111;
+    gdt[4].base_high8  = 0;
+
+    // Kernel code 64.
+    gdt[5].limit       = 0;
+    gdt[5].base_low16  = 0;
+    gdt[5].base_mid8   = 0;
+    gdt[5].access      = 0b10011010;
+    gdt[5].granularity = 0b00100000;
+    gdt[5].base_high8  = 0;
+
+    // Kernel data 64.
+    gdt[6].limit       = 0;
+    gdt[6].base_low16  = 0;
+    gdt[6].base_mid8   = 0;
+    gdt[6].access      = 0b10010010;
+    gdt[6].granularity = 0;
+    gdt[6].base_high8  = 0;
+
+    // SYSENTER related dummy entries
+    gdt[7] = (struct gdt_descriptor){0};
+    gdt[8] = (struct gdt_descriptor){0};
+
+    // User code 64.
+    gdt[9].limit       = 0;
+    gdt[9].base_low16  = 0;
+    gdt[9].base_mid8   = 0;
+    gdt[9].access      = 0b11111010;
+    gdt[9].granularity = 0b00100000;
+    gdt[9].base_high8  = 0;
+
+    // User data 64.
+    gdt[10].limit       = 0;
+    gdt[10].base_low16  = 0;
+    gdt[10].base_mid8   = 0;
+    gdt[10].access      = 0b11110010;
+    gdt[10].granularity = 0;
+    gdt[10].base_high8  = 0;
+
+    // Set the pointer.
+    gdtr.limit = sizeof(gdt) - 1;
+    gdtr.base  = (uint64_t)&gdt;
+
+    gdt_reload();
+}
+
+void gdt_reload(void) {
+    /* Load the GDT and reset the segment registers */
     asm volatile (
-        "lgdt %0"
+        "lgdt %0\n\t"
+        "push $0x28\n\t"
+        "lea 1f(%%rip), %%rax\n\t"
+        "push %%rax\n\t"
+        "lretq\n\t"
+        "1:\n\t"
+        "mov $0x30, %%eax\n\t"
+        "mov %%eax, %%ds\n\t"
+        "mov %%eax, %%es\n\t"
+        "mov %%eax, %%fs\n\t"
+        "mov %%eax, %%gs\n\t"
+        "mov %%eax, %%ss\n\t"
         :
-        : "m"(gdt_desc)
+        : "m"(gdtr)
+        : "rax", "memory"
     );
-}
-
-// Function to set up a GDT entry
-void set_gdt_entry(uint32_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t granularity) {
-    gdt[index].limit_low = limit & 0xFFFF;
-    gdt[index].base_low = base & 0xFFFF;
-    gdt[index].base_mid = (base >> 16) & 0xFF;
-    gdt[index].access = access;
-    gdt[index].granularity = granularity;
-    gdt[index].base_high = (base >> 24) & 0xFF;
-    gdt[index].base_high |= (base >> 32) & 0xFFFFFFFFFFUL;
-}
-
-// Example usage
-void setup_gdt() {
-    // Set up null segment
-    set_gdt_entry(0, 0, 0, 0, 0);
-
-    // Set up code segment
-    set_gdt_entry(1, 0, 0xFFFFF, 0x9A, 0xA);
-
-    // Set up data segment
-    set_gdt_entry(2, 0, 0xFFFFF, 0x92, 0xA);
-
-    // Load the GDT
-    load_gdt();
 }

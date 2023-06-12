@@ -15,6 +15,15 @@
     jmp isrCommon
 %endmacro
 
+%macro IRQ_ENTRY 2
+	global _irq%1
+	_irq%1:
+		cli
+		push byte 0
+		push byte %2
+		jmp irqCommon
+%endmacro
+
 ISR_NOERRCODE 0
 ISR_NOERRCODE 1
 ISR_NOERRCODE 2
@@ -47,6 +56,9 @@ ISR_NOERRCODE 28
 ISR_NOERRCODE 29
 ISR_NOERRCODE 30
 ISR_NOERRCODE 31
+
+ISR_NOERRCODE 32
+ISR_NOERRCODE 33
 
 [GLOBAL _load_idt]
 [EXTERN idtP]
@@ -91,7 +103,6 @@ isrCommon:
     pop rbp
     pop rdi
     pop rsi
-    pop rbx
     pop rdx
     pop rcx
     pop rbx

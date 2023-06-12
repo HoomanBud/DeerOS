@@ -5,25 +5,22 @@
 #include <flanterm/backends/fb.h>
 #include <./sys/gdt.h>
 #include <./sys/idt.h>
+#include <kernel.h>
+#include <./sys/print.h>
+#include <time/pit.h>
+#include <time/time.h>
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent.
 
-static volatile struct limine_framebuffer_request framebuffer_request = {
+
+
+
+static volatile struct limine_memmap_request memmap_request = {
     .id = LIMINE_FRAMEBUFFER_REQUEST,
     .revision = 0
 };
-
-static volatile struct limine_memmap_request memmap_request = {
-    .id = LIMINE_MEMMAP_REQUEST,
-    .revision = 0
-};
-
-
-
-
-
 
 
 
@@ -126,6 +123,21 @@ static void hcf(void) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 size_t strlen(const char *str) {
     size_t i = 0;
     while(str[i]) ++i;
@@ -137,13 +149,13 @@ size_t strlen(const char *str) {
 // linker script accordingly.
 void _start(void) {
     // Ensure we got a framebuffer.
-    if (framebuffer_request.response == NULL
-     || framebuffer_request.response->framebuffer_count < 1) {
-        hcf();
-    }
+    // if (framebuffer_request.response == NULL
+    //  || framebuffer_request.response->framebuffer_count < 1) {
+    //     hcf();
+    // }
 
     // Fetch the first framebuffer.
-    struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
+    // struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
 
     // Note: we assume the framebuffer model is RGB with 32-bit pixels.
     // for (size_t i = 0; i < 100; i++) {
@@ -161,25 +173,32 @@ void _start(void) {
     //uint32_t memSize = 1024 + bootinfo->m_memoryLo + bootinfo->m_memoryHi*64;
 
     //struct limine_memmap_entry** memmap = memmap_request.response->entries[0];
-    struct flanterm_context *fc = flanterm_fb_init(NULL, NULL, framebuffer->address, framebuffer->width, framebuffer->height, framebuffer->pitch, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 1, 1, 1, 0);
 
-    flanterm_write(fc, "Loading DeerOS...\n", strlen("Loading DeerOS...\n"));
-    flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
+    // struct flanterm_context *fc = flanterm_fb_init(NULL, NULL, framebuffer->address, framebuffer->width, framebuffer->height, framebuffer->pitch, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 1, 1, 1, 0);
 
-    setup_gdt();
+    // flanterm_write(fc, "Loading DeerOS...\n", strlen("Loading DeerOS...\n"));
+    // flanterm_write(fc, "Loading Graphical Mode...\n", strlen("Loading Graphical Mode...\n"));
+
+    print("Loading DeerOS...\n");
+
+    gdt_init();
+    print("GDT Init: OK.\n");
     idtStart();
+    print("IDT Init: OK.\n");
+    FreelistPMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
 
-    for (uint64_t i = 0; i < framebuffer->height; i++)
-    {
-        for (uint64_t e = 0; e < framebuffer->width; e++)
-        {
-            uint32_t color = 0x000000;
-            uintptr_t base = (uintptr_t) framebuffer->address;
-            *(uint32_t*) (base + i * framebuffer->pitch + e * framebuffer->bpp / 8) = color;
-        }
-    }
 
-    asm ("int $0x0");
+    //for (uint64_t i = 0; i < framebuffer->height; i++)
+    //{
+    //    for (uint64_t e = 0; e < framebuffer->width; e++)
+    //    {
+    //        uint32_t color = 0x000000;
+    //        uintptr_t base = (uintptr_t) framebuffer->address;
+    //        *(uint32_t*) (base + i * framebuffer->pitch + e * framebuffer->bpp / 8) = color;
+    //    }
+    //}
+
+    //asm("int $0x0");
 
     // We're done, just hang...
     hcf();
