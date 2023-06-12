@@ -13,7 +13,12 @@
 #define PDE_PRESENT 0x1
 #define PDE_WRITABLE 0x2
 #define PDE_USER 0x4
-#define PDE_4MB 0x80
+#define PDE_4KB 0x80
+
+#define PDPTE_PRESENT 0x1
+#define PDPTE_WRITABLE 0x2
+#define PDPTE_USER 0x4
+#define PDPTE_1GB 0x80
 
 typedef uint64_t pagemap_t;
 
@@ -23,20 +28,32 @@ typedef struct PageTable {
 
 PageTable* active_table;
 
+typedef struct PageDirectoryPointerTable {
+    uint64_t entries[512];
+} PageDirectoryPointerTable;
+
+PageDirectoryPointerTable* current_pdpt_table;
+
 typedef struct PageDirectory {
     uint64_t entries[512];
 } PageDirectory;
 
-PageDirectory* current_directory;
+PageDirectory* current_pd_table;
+
+typedef struct PageMapLevel4 {
+    uint64_t entries[512];
+} PageMapLevel4;
+
+PageMapLevel4* current_pml4_table;
 
 void switch_page_table(PageTable* table) {
     active_table = table;
-    asm volatile("mov %0, %%cr3" ::"r"(&table->entries));
+    asm volatile("mov %0, %%cr3" :: "r"(table->entries));
 }
 
 void map_page(PageTable* table, uint64_t virtual_addr, uint64_t physical_addr, uint64_t flags) {
     uint64_t pte_index = (virtual_addr >> 12) & 0x1FF;
-    table->entries[pte_index] = (physical_addr & 0xFFFFF000) | flags;
+    table->entries[pte_index] = (physical_addr & 0xFFFFFFFFFFFFF000) | flags;
 }
 
 void unmap_page(PageTable* table, uint64_t virtual_addr) {
@@ -44,16 +61,14 @@ void unmap_page(PageTable* table, uint64_t virtual_addr) {
     table->entries[pte_index] = 0;
 }
 
-PageTable* allocate_page_table(size_t size) {
-    size_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+PageTable* allocate_page_table(size_t num_pages) {
+    void* table_addr = allocate(num_pages);
 
-    void* table_addr = allocate(num_pages * PAGE_SIZE);
     if (table_addr == NULL) {
         print("NULL returned from allocation. Halting...\n");
-    
+
         asm ("cli");
-        for (;;)
-        {
+        for (;;) {
             asm ("hlt");
         }
     }
@@ -66,53 +81,64 @@ PageTable* allocate_page_table(size_t size) {
     return table;
 }
 
-void deallocate_page_table(PageTable* table, size_t size) {
-    size_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-
-    deallocate(table, num_pages * PAGE_SIZE);
+void deallocate_page_table(PageTable* table, size_t num_pages) {
+    deallocate(table, num_pages);
 }
 
 void VMMInit() {
-    PageDirectory* directory = allocate_page_table(4096);
-    if (directory == NULL) {
-        print("Page Directory is NULL. Halting...\n");
-    
+    PageMapLevel4* pml4_table = allocate_page_table(1);
+    if (pml4_table == NULL) {
+        print("Page Map Level 4 table is NULL. Halting...\n");
+
         asm ("cli");
-        for (;;)
-        {
+        for (;;) {
             asm ("hlt");
         }
     }
 
-    map_page(directory, (uint64_t)directory, (uint64_t)directory, PDE_PRESENT | PDE_WRITABLE);
+    PageDirectoryPointerTable* pdpt_table = allocate_page_table(1);
+    if (pdpt_table == NULL) {
+        print("Page Directory Pointer Table is NULL. Halting...\n");
 
-    current_directory = directory;
-    switch_page_table((PageTable*)directory);
+        asm ("cli");
+        for (;;) {
+            asm ("hlt");
+        }
+    }
+
+    PageDirectory* pd_table = allocate_page_table(1);
+    if (pd_table == NULL) {
+        print("Page Directory table is NULL. Halting...\n");
+
+        asm ("cli");
+        for (;;) {
+            asm ("hlt");
+        }
+    }
+
+    PageTable* pt_table = allocate_page_table(1);
+    if (pt_table == NULL) {
+        print("Page Table is NULL. Halting...\n");
+
+        asm ("cli");
+        for (;;) {
+            asm ("hlt");
+        }
+    }
+
+    pml4_table->entries[0] = (uint64_t)pdpt_table | PDPTE_PRESENT | PDPTE_WRITABLE | PDPTE_USER;
+    pdpt_table->entries[0] = (uint64_t)pd_table | PDE_PRESENT | PDE_WRITABLE | PDE_USER;
+    pd_table->entries[0] = (uint64_t)pt_table | PDE_PRESENT | PDE_WRITABLE | PDE_USER;
+
+    current_pml4_table = pml4_table;
+    current_pdpt_table = pdpt_table;
+    current_pd_table = pd_table;
+    active_table = pt_table;
+
+    switch_page_table((PageTable*)pt_table);
 }
 
 void switch_page_directory(PageDirectory* directory) {
-    current_directory = directory;
+    current_pd_table = directory;
     switch_page_table((PageTable*)directory);
 }
-
-// void kernel_main(struct memory_map_entry* mem_map, size_t mem_map_entries) {
-//     // Initialize the Virtual Memory Manager
-//     init_vmm();
-
-//     // Example usage: Map a virtual address to a physical address
-//     uint64_t virtual_addr = 0x12345000;
-//     uint64_t physical_addr = 0x56789000;
-//     map_page(active_table, virtual_addr, physical_addr, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
-
-//     // Example usage: Access the mapped address
-//     uint64_t* value = (uint64_t*)virtual_addr;
-//     *value = 42;
-
-//     // Example usage: Unmap the virtual address
-//     unmap_page(active_table, virtual_addr);
-
-//     // End of the kernel code
-//     while (1) {
-//         // Do nothing
-//     }
-// }

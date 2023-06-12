@@ -193,12 +193,12 @@ void _start(void) {
     idtStart();
     print("IDT Init: OK.\n");
 
-    for (int i = 0; i < 10; i++)
-    {
-        void* r = allocate(1);
+    // for (int i = 0; i < 10; i++)
+    // {
+    //     void* r = allocate(1);
 
-        printf("%p\n", r);
-    }
+    //     printf("%p\n", r);
+    // }
 
 
     //for (uint64_t i = 0; i < framebuffer->height; i++)
