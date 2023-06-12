@@ -7,8 +7,11 @@
 #include <./sys/idt.h>
 #include <kernel.h>
 #include <./sys/print.h>
-#include <time/pit.h>
-#include <time/time.h>
+//#include <time/pit.h>
+//#include <time/time.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
+#include <printf/printf.h>
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -18,7 +21,7 @@
 
 
 static volatile struct limine_memmap_request memmap_request = {
-    .id = LIMINE_FRAMEBUFFER_REQUEST,
+    .id = LIMINE_MEMMAP_REQUEST,
     .revision = 0
 };
 
@@ -181,11 +184,21 @@ void _start(void) {
 
     print("Loading DeerOS...\n");
 
+    FreelistPMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
+    print("Physical Memory Manager Init: OK.\n");
+    VMMInit();
+    print("Virtual Memory Manager Init: OK\n");
     gdt_init();
     print("GDT Init: OK.\n");
     idtStart();
     print("IDT Init: OK.\n");
-    FreelistPMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
+
+    for (int i = 0; i < 10; i++)
+    {
+        void* r = allocate(1);
+
+        printf("%p\n", r);
+    }
 
 
     //for (uint64_t i = 0; i < framebuffer->height; i++)
