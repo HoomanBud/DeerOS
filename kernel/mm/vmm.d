@@ -1,4 +1,3 @@
-mm/vmm.o: mm/vmm.c mm/vmm.h mm/pmm.h mm/../sys/print.h
-mm/vmm.h:
-mm/pmm.h:
+mm/vmm.o: mm/vmm.c mm/../sys/print.h mm/../limine.h
 mm/../sys/print.h:
+mm/../limine.h:

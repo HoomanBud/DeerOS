@@ -1,144 +1,130 @@
 #include <stdint.h>
 #include <stddef.h>
-#include "vmm.h"
-#include "pmm.h"
 #include "../sys/print.h"
+#include "../limine.h"
+
+static volatile struct limine_kernel_address_request kernel_address_request = {
+    .id = LIMINE_KERNEL_ADDRESS_REQUEST,
+    .revision = 0
+};
+
+#define KERNEL_VIRTUAL_OFFSET kernel_address_request.response->virtual_base
+#define KERNEL_PHYSICAL_OFFSET kernel_address_request.response->physical_base
 
 #define PAGE_SIZE 4096
+#define NUM_MAP_LEVELS 4
 
-#define PTE_PRESENT 0x1
-#define PTE_WRITABLE 0x2
-#define PTE_USER 0x4
+typedef struct {
+    uint64_t entry;
+} PageTableEntry;
 
-#define PDE_PRESENT 0x1
-#define PDE_WRITABLE 0x2
-#define PDE_USER 0x4
-#define PDE_4KB 0x80
-
-#define PDPTE_PRESENT 0x1
-#define PDPTE_WRITABLE 0x2
-#define PDPTE_USER 0x4
-#define PDPTE_1GB 0x80
-
-typedef uint64_t pagemap_t;
-
-typedef struct PageTable {
-    uint64_t entries[512];
+typedef struct {
+    PageTableEntry entries[512];
 } PageTable;
 
-PageTable* active_table;
-
-typedef struct PageDirectoryPointerTable {
-    uint64_t entries[512];
-} PageDirectoryPointerTable;
-
-PageDirectoryPointerTable* current_pdpt_table;
-
-typedef struct PageDirectory {
-    uint64_t entries[512];
-} PageDirectory;
-
-PageDirectory* current_pd_table;
-
-typedef struct PageMapLevel4 {
-    uint64_t entries[512];
-} PageMapLevel4;
-
-PageMapLevel4* current_pml4_table;
-
-void switch_page_table(PageTable* table) {
-    active_table = table;
-    asm volatile("mov %0, %%cr3" :: "r"(table->entries));
-}
-
-void map_page(PageTable* table, uint64_t virtual_addr, uint64_t physical_addr, uint64_t flags) {
-    uint64_t pte_index = (virtual_addr >> 12) & 0x1FF;
-    table->entries[pte_index] = (physical_addr & 0xFFFFFFFFFFFFF000) | flags;
-}
-
-void unmap_page(PageTable* table, uint64_t virtual_addr) {
-    uint64_t pte_index = (virtual_addr >> 12) & 0x1FF;
-    table->entries[pte_index] = 0;
-}
-
-PageTable* allocate_page_table(size_t num_pages) {
-    void* table_addr = allocate(num_pages);
-
-    if (table_addr == NULL) {
-        print("NULL returned from allocation. Halting...\n");
-
-        asm ("cli");
-        for (;;) {
-            asm ("hlt");
-        }
-    }
-
-    PageTable* table = (PageTable*)table_addr;
-    for (int i = 0; i < 512; i++) {
-        table->entries[i] = 0;
-    }
-
-    return table;
-}
-
-void deallocate_page_table(PageTable* table, size_t num_pages) {
-    deallocate(table, num_pages);
-}
+PageTable* pml4_table;
 
 void VMMInit() {
-    PageMapLevel4* pml4_table = allocate_page_table(1);
-    if (pml4_table == NULL) {
-        print("Page Map Level 4 table is NULL. Halting...\n");
-
-        asm ("cli");
-        for (;;) {
-            asm ("hlt");
-        }
+    pml4_table = (PageTable*)allocate(1);
+    for (size_t i = 0; i < 512; i++) {
+        pml4_table->entries[i].entry = 0;
     }
 
-    PageDirectoryPointerTable* pdpt_table = allocate_page_table(1);
-    if (pdpt_table == NULL) {
-        print("Page Directory Pointer Table is NULL. Halting...\n");
-
-        asm ("cli");
-        for (;;) {
-            asm ("hlt");
-        }
+    PageTable* pdpt_table = (PageTable*)allocate(1);
+    for (size_t i = 0; i < 512; i++) {
+        pdpt_table->entries[i].entry = 0;
     }
+    pml4_table->entries[0].entry = ((uint64_t)pdpt_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
 
-    PageDirectory* pd_table = allocate_page_table(1);
-    if (pd_table == NULL) {
-        print("Page Directory table is NULL. Halting...\n");
-
-        asm ("cli");
-        for (;;) {
-            asm ("hlt");
-        }
+    PageTable* pd_table = (PageTable*)allocate(1);
+    for (size_t i = 0; i < 512; i++) {
+        pd_table->entries[i].entry = 0;
     }
+    pdpt_table->entries[0].entry = ((uint64_t)pd_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
 
-    PageTable* pt_table = allocate_page_table(1);
-    if (pt_table == NULL) {
-        print("Page Table is NULL. Halting...\n");
-
-        asm ("cli");
-        for (;;) {
-            asm ("hlt");
-        }
+    PageTable* pt_table = (PageTable*)allocate(1);
+    for (size_t i = 0; i < 512; i++) {
+        pt_table->entries[i].entry = 0;
     }
+    pd_table->entries[0].entry = ((uint64_t)pt_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
 
-    pml4_table->entries[0] = (uint64_t)pdpt_table | PDPTE_PRESENT | PDPTE_WRITABLE | PDPTE_USER;
-    pdpt_table->entries[0] = (uint64_t)pd_table | PDE_PRESENT | PDE_WRITABLE | PDE_USER;
-    pd_table->entries[0] = (uint64_t)pt_table | PDE_PRESENT | PDE_WRITABLE | PDE_USER;
+    uint64_t physical_addr = allocate(1) * PAGE_SIZE;
+    uint64_t virtual_addr = physical_addr + KERNEL_VIRTUAL_OFFSET;
 
-    current_pml4_table = pml4_table;
-    current_pdpt_table = pdpt_table;
-    current_pd_table = pd_table;
-    active_table = pt_table;
-
-    switch_page_table((PageTable*)pt_table);
+    map_page(virtual_addr, physical_addr);
 }
 
-void switch_page_directory(PageDirectory* directory) {
-    current_pd_table = directory;
-    switch_page_table((PageTable*)directory);
+
+void map_page(uint64_t virtual_addr, uint64_t physical_addr) {
+    PageTable* pdpt_table;
+    PageTable* pd_table;
+    PageTable* pt_table;
+
+    uint64_t pml4_index = (virtual_addr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (virtual_addr >> 30) & 0x1FF;
+    uint64_t pd_index = (virtual_addr >> 21) & 0x1FF;
+    uint64_t pt_index = (virtual_addr >> 12) & 0x1FF;
+
+    if (!pml4_table->entries[pml4_index].entry) {
+        pml4_table->entries[pml4_index].entry = (uint64_t)allocate(1);
+        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
+        for (size_t i = 0; i < 512; i++) {
+            pdpt_table->entries[i].entry = 0;
+        }
+    } else {
+        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
+    }
+
+    if (!pdpt_table->entries[pdpt_index].entry) {
+        pdpt_table->entries[pdpt_index].entry = (uint64_t)allocate(1);
+        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
+        for (size_t i = 0; i < 512; i++) {
+            pd_table->entries[i].entry = 0;
+        }
+    } else {
+        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
+    }
+
+    if (!pd_table->entries[pd_index].entry) {
+        pd_table->entries[pd_index].entry = (uint64_t)allocate(1);
+        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
+        for (size_t i = 0; i < 512; i++) {
+            pt_table->entries[i].entry = 0;
+        }
+    } else {
+        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
+    }
+
+    pt_table->entries[pt_index].entry = physical_addr | 0x3;
+}
+
+void unmap_page(uint64_t virtual_addr) {
+    PageTable* pdpt_table;
+    PageTable* pd_table;
+    PageTable* pt_table;
+
+    uint64_t pml4_index = (virtual_addr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (virtual_addr >> 30) & 0x1FF;
+    uint64_t pd_index = (virtual_addr >> 21) & 0x1FF;
+    uint64_t pt_index = (virtual_addr >> 12) & 0x1FF;
+
+    if (!pml4_table->entries[pml4_index].entry) {
+        return;
+    } else {
+        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
+    }
+
+    if (!pdpt_table->entries[pdpt_index].entry) {
+        return;
+    } else {
+        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
+    }
+
+    if (!pd_table->entries[pd_index].entry) {
+        return;
+    } else {
+        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
+    }
+
+    pt_table->entries[pt_index].entry = 0;
 }
