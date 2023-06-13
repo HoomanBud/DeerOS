@@ -186,7 +186,7 @@ void _start(void) {
 
     FreelistPMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
     print("Physical Memory Manager Init: OK.\n");
-    VMMInit();
+    VMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
     print("Virtual Memory Manager Init: OK\n");
     gdt_init();
     print("GDT Init: OK.\n");

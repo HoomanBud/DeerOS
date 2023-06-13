@@ -1,130 +1,104 @@
 #include <stdint.h>
 #include <stddef.h>
-#include "../sys/print.h"
 #include "../limine.h"
-
-static volatile struct limine_kernel_address_request kernel_address_request = {
-    .id = LIMINE_KERNEL_ADDRESS_REQUEST,
-    .revision = 0
-};
-
-#define KERNEL_VIRTUAL_OFFSET kernel_address_request.response->virtual_base
-#define KERNEL_PHYSICAL_OFFSET kernel_address_request.response->physical_base
+#include "../sys/print.h"
+#include "pmm.h"
 
 #define PAGE_SIZE 4096
-#define NUM_MAP_LEVELS 4
+#define NUM_PML4_ENTRIES 512
+#define NUM_PDPT_ENTRIES 512
+#define NUM_PD_ENTRIES 512
+#define NUM_PT_ENTRIES 512
 
 typedef struct {
-    uint64_t entry;
-} PageTableEntry;
-
-typedef struct {
-    PageTableEntry entries[512];
+    void* entries[NUM_PT_ENTRIES];
 } PageTable;
 
-PageTable* pml4_table;
+typedef struct {
+    PageTable* entries[NUM_PD_ENTRIES];
+} PageDirectory;
 
-void VMMInit() {
-    pml4_table = (PageTable*)allocate(1);
-    for (size_t i = 0; i < 512; i++) {
-        pml4_table->entries[i].entry = 0;
+typedef struct {
+    PageDirectory* entries[NUM_PDPT_ENTRIES];
+} PageDirectoryPointerTable;
+
+typedef struct {
+    PageDirectoryPointerTable* entries[NUM_PML4_ENTRIES];
+} PageMapLevel4;
+
+PageMapLevel4* pml4;
+
+void VMMInit(struct limine_memmap_entry** memmap, size_t num_entries) {
+    pml4 = (PageMapLevel4*)allocate(1);
+    for (int i = 0; i < NUM_PML4_ENTRIES; i++) {
+        pml4->entries[i] = NULL;
     }
 
-    PageTable* pdpt_table = (PageTable*)allocate(1);
-    for (size_t i = 0; i < 512; i++) {
-        pdpt_table->entries[i].entry = 0;
+    for (int i = 0; i < num_entries; i++) {
+        if (memmap[i]->type == LIMINE_MEMMAP_USABLE) {
+            print("Found Usable Memmap.\n");
+            uint64_t start_addr = memmap[i]->base;
+            uint64_t end_addr = memmap[i]->base + memmap[i]->length;
+
+            for (uint64_t addr = start_addr; addr < end_addr; addr += PAGE_SIZE) {
+                VMMMapPage((void*)addr, (void*)addr);
+            }
+        }
     }
-    pml4_table->entries[0].entry = ((uint64_t)pdpt_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
-
-    PageTable* pd_table = (PageTable*)allocate(1);
-    for (size_t i = 0; i < 512; i++) {
-        pd_table->entries[i].entry = 0;
-    }
-    pdpt_table->entries[0].entry = ((uint64_t)pd_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
-
-    PageTable* pt_table = (PageTable*)allocate(1);
-    for (size_t i = 0; i < 512; i++) {
-        pt_table->entries[i].entry = 0;
-    }
-    pd_table->entries[0].entry = ((uint64_t)pt_table - KERNEL_PHYSICAL_OFFSET) | 0x3;
-
-    uint64_t physical_addr = allocate(1) * PAGE_SIZE;
-    uint64_t virtual_addr = physical_addr + KERNEL_VIRTUAL_OFFSET;
-
-    map_page(virtual_addr, physical_addr);
 }
 
+void VMMMapPage(void* virtual_addr, void* physical_addr) {
+    uint64_t vaddr = (uint64_t)virtual_addr;
+    uint64_t paddr = (uint64_t)physical_addr;
 
-void map_page(uint64_t virtual_addr, uint64_t physical_addr) {
-    PageTable* pdpt_table;
-    PageTable* pd_table;
-    PageTable* pt_table;
+    uint64_t pml4_index = (vaddr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (vaddr >> 30) & 0x1FF;
+    uint64_t pd_index = (vaddr >> 21) & 0x1FF;
+    uint64_t pt_index = (vaddr >> 12) & 0x1FF;
 
-    uint64_t pml4_index = (virtual_addr >> 39) & 0x1FF;
-    uint64_t pdpt_index = (virtual_addr >> 30) & 0x1FF;
-    uint64_t pd_index = (virtual_addr >> 21) & 0x1FF;
-    uint64_t pt_index = (virtual_addr >> 12) & 0x1FF;
-
-    if (!pml4_table->entries[pml4_index].entry) {
-        pml4_table->entries[pml4_index].entry = (uint64_t)allocate(1);
-        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
-        for (size_t i = 0; i < 512; i++) {
-            pdpt_table->entries[i].entry = 0;
+    if (pml4->entries[pml4_index] == NULL) {
+        pml4->entries[pml4_index] = (PageDirectoryPointerTable*)allocate(1);
+        for (int i = 0; i < NUM_PDPT_ENTRIES; i++) {
+            pml4->entries[pml4_index]->entries[i] = NULL;
         }
-    } else {
-        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
     }
 
-    if (!pdpt_table->entries[pdpt_index].entry) {
-        pdpt_table->entries[pdpt_index].entry = (uint64_t)allocate(1);
-        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
-        for (size_t i = 0; i < 512; i++) {
-            pd_table->entries[i].entry = 0;
+    if (pml4->entries[pml4_index]->entries[pdpt_index] == NULL) {
+        pml4->entries[pml4_index]->entries[pdpt_index] = (PageDirectory*)allocate(1);
+        for (int i = 0; i < NUM_PD_ENTRIES; i++) {
+            pml4->entries[pml4_index]->entries[pdpt_index]->entries[i] = NULL;
         }
-    } else {
-        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
     }
 
-    if (!pd_table->entries[pd_index].entry) {
-        pd_table->entries[pd_index].entry = (uint64_t)allocate(1);
-        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
-        for (size_t i = 0; i < 512; i++) {
-            pt_table->entries[i].entry = 0;
+    if (pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index] == NULL) {
+        pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index] = (PageTable*)allocate(1);
+        for (int i = 0; i < NUM_PT_ENTRIES; i++) {
+            pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index]->entries[i] = NULL;
         }
-    } else {
-        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
     }
 
-    pt_table->entries[pt_index].entry = physical_addr | 0x3;
+    pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index]->entries[pt_index] = (void*)(paddr | 0x03);
 }
 
-void unmap_page(uint64_t virtual_addr) {
-    PageTable* pdpt_table;
-    PageTable* pd_table;
-    PageTable* pt_table;
+void VMMUnmapPage(void* virtual_addr) {
+    uint64_t vaddr = (uint64_t)virtual_addr;
 
-    uint64_t pml4_index = (virtual_addr >> 39) & 0x1FF;
-    uint64_t pdpt_index = (virtual_addr >> 30) & 0x1FF;
-    uint64_t pd_index = (virtual_addr >> 21) & 0x1FF;
-    uint64_t pt_index = (virtual_addr >> 12) & 0x1FF;
+    uint64_t pml4_index = (vaddr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (vaddr >> 30) & 0x1FF;
+    uint64_t pd_index = (vaddr >> 21) & 0x1FF;
+    uint64_t pt_index = (vaddr >> 12) & 0x1FF;
 
-    if (!pml4_table->entries[pml4_index].entry) {
+    if (pml4->entries[pml4_index] == NULL) {
         return;
-    } else {
-        pdpt_table = (PageTable*)(pml4_table->entries[pml4_index].entry);
     }
 
-    if (!pdpt_table->entries[pdpt_index].entry) {
+    if (pml4->entries[pml4_index]->entries[pdpt_index] == NULL) {
         return;
-    } else {
-        pd_table = (PageTable*)(pdpt_table->entries[pdpt_index].entry);
     }
 
-    if (!pd_table->entries[pd_index].entry) {
+    if (pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index] == NULL) {
         return;
-    } else {
-        pt_table = (PageTable*)(pd_table->entries[pd_index].entry);
     }
 
-    pt_table->entries[pt_index].entry = 0;
+    pml4->entries[pml4_index]->entries[pdpt_index]->entries[pd_index]->entries[pt_index] = NULL;
 }
