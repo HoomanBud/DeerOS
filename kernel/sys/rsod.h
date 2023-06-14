@@ -1,0 +1,1 @@
+void rsodInit(char error);

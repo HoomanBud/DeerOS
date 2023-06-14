@@ -7,7 +7,7 @@
 #include <./sys/idt.h>
 #include <kernel.h>
 #include <./sys/print.h>
-//#include <time/pit.h>
+#include <time/pit.h>
 //#include <time/time.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
@@ -186,12 +186,14 @@ void _start(void) {
 
     FreelistPMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
     print("Physical Memory Manager Init: OK.\n");
-    VMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
-    print("Virtual Memory Manager Init: OK\n");
+    //VMMInit(memmap_request.response->entries, memmap_request.response->entry_count);
+    //print("Virtual Memory Manager Init: OK\n");
     gdt_init();
     print("GDT Init: OK.\n");
     idtStart();
     print("IDT Init: OK.\n");
+    //timer_install();
+    //print("PIT Timer Init: OK.\n");
 
     // for (int i = 0; i < 10; i++)
     // {

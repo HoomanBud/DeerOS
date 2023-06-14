@@ -26,8 +26,18 @@ void print(char* str)
    if (context == NULL)
    {
       context = flanterm_fb_init(NULL, NULL, framebuffer2->address, framebuffer2->width, framebuffer2->height, framebuffer2->pitch, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 1, 1, 1, 0);
-      context->cursor_enabled = true;
+      context->cursor_enabled = false;
    }
 
     flanterm_write(context, str, strlen2(str));
+}
+
+struct limine_framebuffer* getFramebuffer()
+{
+    return framebuffer2;
+}
+
+struct flanterm_context* getContext()
+{
+    return context;
 }

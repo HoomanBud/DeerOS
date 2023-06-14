@@ -61,7 +61,8 @@ override CFLAGS += \
     -mno-sse2 \
     -mno-red-zone \
     -mcmodel=kernel \
-    -DPRINTF_ALIAS_STANDARD_FUNCTION_NAMES
+    -DPRINTF_ALIAS_STANDARD_FUNCTION_NAMES \
+    -O3
 
 # Internal C preprocessor flags that should not be changed by the user.
 override CPPFLAGS := \

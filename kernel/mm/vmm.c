@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include "../limine.h"
 #include "../sys/print.h"
+#include "../printf/printf.h"
 #include "pmm.h"
 
 #define PAGE_SIZE 4096
@@ -55,6 +56,14 @@ void VMMMapPage(void* virtual_addr, void* physical_addr) {
     uint64_t pdpt_index = (vaddr >> 30) & 0x1FF;
     uint64_t pd_index = (vaddr >> 21) & 0x1FF;
     uint64_t pt_index = (vaddr >> 12) & 0x1FF;
+
+    // printf("Vaddr: %d\n", vaddr);
+    // printf("Paddr: %d\n", paddr);
+
+    // printf("pml4: %d\n", pml4_index);
+    // printf("pdpt: %d\n", pdpt_index);
+    // printf("pd: %d\n", pd_index);
+    // printf("pt: %d\n", pt_index);
 
     if (pml4->entries[pml4_index] == NULL) {
         pml4->entries[pml4_index] = (PageDirectoryPointerTable*)allocate(1);

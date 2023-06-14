@@ -3,6 +3,8 @@
 #include "./../limine.h"
 #include "./idt.h"
 #include "print.h"
+#include "../printf/printf.h"
+#include "rsod.h"
 
 /*
 * Interrupt Descriptor Structure
@@ -160,7 +162,43 @@ void handleIrq(struct regs* r, int irqIndex) {
 	handler(r);
 }
 
-//#define EXC(i, n) case i: _exception(r, n); break;
+static bool rsodBusy = false;
+
+static void _exception(struct registers* r, const char* description) {
+   if (rsodBusy == false)
+   {
+      //rsodInit(description);
+      asm("cli");
+
+      struct limine_framebuffer* fb = getFramebuffer();
+
+      for (uint64_t i = 0; i < fb->height; i++)
+      {
+         for (uint64_t e = 0; e < fb->width; e++)
+         {
+            uintptr_t base = (uintptr_t) fb->address;
+            *(uint32_t*) (base + i * fb->pitch + e * fb->bpp / 8) = 0xb25757;
+         }
+      }
+
+      struct flanterm_context* context = getContext();
+
+      context->set_text_fg_rgb(context, 0x330000);
+      context->set_text_bg_rgb(context, 0xb25757);
+      context->cursor_enabled = false;
+      context->set_cursor_pos(context, 5, 10);
+      flanterm_write(context, "Well that's fucked up, Look's like your PC ran into an issue.", strlen3("Well that's fucked up, Look's like your PC ran into an issue."));
+      context->set_cursor_pos(context, 5, 11);
+      flanterm_write(context, description, strlen3(description));
+
+      for (;;)
+      {
+         asm("hlt");
+      }
+   }
+}
+
+#define EXC(i, n) case i: _exception(regs, n); break;
 #define IRQ(i) case i: handleIrq(regs, i - 32); break;
 
 void idtSet(uint8_t number, uint64_t base, uint16_t selector, uint8_t flags) {
@@ -179,7 +217,9 @@ void idtSet(uint8_t number, uint64_t base, uint16_t selector, uint8_t flags) {
 }
 
 registers* isrHandler(registers* regs) {
+   printf("e: %d\n", regs->int_no);
    switch (regs->int_no) {
+      EXC(14, "PAGE FAULT");
       IRQ(32);
       IRQ(33);
    }
